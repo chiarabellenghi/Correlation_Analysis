@@ -12,3 +12,5 @@ scipy
 healpy
 joblib
 
+matplotlib is required to use the notebooks.
+
