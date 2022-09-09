@@ -1,0 +1,3 @@
+Code to perform the spatial correlation analysis between a catalogue of sources and a list of objects.
+
+This code has been used to reproduce the analysis published in Sara Buson et al 2022 ApJL 933 L43 (https://iopscience.iop.org/article/10.3847/2041-8213/ac7d5b)
