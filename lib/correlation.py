@@ -1,11 +1,14 @@
 # -*-correlation:utf8-*-
 
-# SciPy
+# General
+from copy import deepcopy
 import numpy as np
+from numpy.lib.recfunctions import stack_arrays
 
 # Healpy
 import healpy as hp
 
+# Multi-threading
 from joblib import Parallel, delayed
 
 # local
@@ -325,46 +328,7 @@ class Correlator(object):
 
         return
 
-    @property
-    def logpVal_thr(self):
-        return self._logpVal_thr
-
-    @logpVal_thr.setter
-    def logpVal_thr(self, value, name='hotspots'):
-        if not isinstance(value, float):
-            raise ValueError("To be implemented.")
-
-        self._logpVal_thr = value
-
-        if name != 'hotspots':
-            return
-
-        print("\tApplying the pvalue threshold cut...")
-        if 'logpVal' in self.primaries[name].events.dtype.names:
-            mask = self.primaries[name].events['logpVal'] > self.logpVal_thr
-            self.primaries[name].events = self.primaries[name].events[mask]
-        else:
-            print(
-                "\n*****************************************************\n"
-                "Warning! The sample is missing the 'logpVal' field. "
-                "The pVal threshold cut will NOT be applied."
-                "\n*****************************************************\n"
-            )
-        print(
-            f"\tSpots with -log10p > {value}: {self.primaries[name].events.size}"
-        )
-
-        self.primaries[name].u = core.ang2vec(
-            self.primaries[name].events['ra'], self.primaries[name].events['dec']
-        )
-        self.primaries[name].N = len(self.primaries[name].events)
-
-        print(
-            f"After the cut(s), {self.primaries[name].N} hotspots will be analysed.")
-
-        return
-
-    def add_primary(self, name, sample):
+    def add_primary(self, name, sample, logpVal_thr_list=None, sigma_list=None):
         '''Add EventSample to primaries
 
         Parameters
@@ -373,9 +337,11 @@ class Correlator(object):
             Name of the sample.
         sample : EventSample
             Sample of neutrino events to add to the primaries dict().
+        logpVal_thr_list : sequence of float
+            Minimum threshold for the hotspots in -log10(pValue).
+        sigma_list : sequence of float
+            Association radius for the hotspots in degrees.
         '''
-        # assert(not (self.secondaries.has_key(name)
-        #        or self.primaries.has_key(name)))
 
         assert(isinstance(sample, EventSample))
 
@@ -401,13 +367,44 @@ class Correlator(object):
             sample.events = sample.events[mask]
             print(f"\tAfter galactic plane cut: {sample.events.size}")
 
-        # Update the attributes of the EventSample object:
-        sample.u = core.ang2vec(sample.events['ra'], sample.events['dec'])
-        sample.N = len(sample.events)
+        if logpVal_thr_list is not None or sigma_list is not None:
+            if not (hasattr(
+                    logpVal_thr_list, '__iter__'
+            ) and hasattr(
+                    sigma_list, '__iter__')):
+                raise TypeError("To be implememented.")
+            print(
+                f"\tApplying the pValue threshold cuts...")
+            for logpVal_thr in logpVal_thr_list:
+                pmask = sample.events['logpVal'] > logpVal_thr
+                this_sample = deepcopy(sample)
+                this_sample.events = this_sample.events[pmask]
+                # Update the attributes of the EventSample object:
+                this_sample.u = core.ang2vec(
+                    this_sample.events['ra'], this_sample.events['dec'])
+                this_sample.N = len(this_sample.events)
+                print(
+                    f"-log10(pVal) > {logpVal_thr}: {this_sample.N} hotspots will be analysed.")
+                for sigma in sigma_list:
+                    # Make a deepcopy of the object to not overwrite its properties
+                    sigma_sample = deepcopy(this_sample)
 
-        print(f"After the cut(s), {sample.N} hotspots will be analysed.")
+                    # Cut the pValue threshold if a threshold is provided
 
-        self.primaries[name] = sample
+                    sigma_sample.add_sigma_field(np.radians(sigma))
+                    this_name = name + \
+                        f": Lmin = {logpVal_thr:.1f}, sigma = {sigma:.2f}"
+
+                    self.primaries[this_name] = sigma_sample
+                    del sigma_sample
+                del this_sample
+
+        else:
+            # Update the attributes of the EventSample object:
+            sample.u = core.ang2vec(
+                sample.events['ra'], sample.events['dec'])
+            sample.N = len(sample.events)
+            self.primaries[name] = sample
 
         return
 
@@ -427,7 +424,7 @@ class Correlator(object):
         '''
         mcat = self.catalogue["FOM"] >= binval
 
-        m_cp = np.zeros_like(mcat)
+        m_cp = np.zeros(len(mcat), dtype=[(k, bool) for k in self.primaries])
 
         result = dict()
 
@@ -437,13 +434,14 @@ class Correlator(object):
             cosD = core.dist(u, self.v)
 
             m = cosD >= np.cos(sigma)[:, np.newaxis]
-            m_cp |= np.any(m & mcat, axis=0)
+            m_cp[key] |= np.any(m & mcat, axis=0)
 
             result[key] = np.any(m & mcat, axis=1)
 
             if verbose:
+                print()
                 print(
-                    f"{key}: {np.count_nonzero(result[key])} counterparts above {binval}"
+                    f"{key}: {np.count_nonzero(result[key])}/{sigma.size} counterparts above {binval}"
                 )
 
                 if np.count_nonzero(result[key]) < 1:
@@ -721,7 +719,7 @@ class Correlator(object):
         result = Parallel(n_jobs=n_jobs, verbose=1)(delayed(seeder)(arg)
                                                     for arg in args)
 
-        return np.vstack(result)
+        return stack_arrays(result, usemask=False)
 
 
 class BiasedCorrelator(Correlator):
