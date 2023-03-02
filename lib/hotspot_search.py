@@ -67,6 +67,7 @@ class skyscan_handler(object):
         # For the HPA, we always use the -log10(p-value)
         if path is not None:
             scan = np.load(path)
+            scan = np.sort(scan, order="npix")
             self._log10p_map = -np.log10(scan["pvalue"])
             self._pix_map = scan["npix"]
         else:
