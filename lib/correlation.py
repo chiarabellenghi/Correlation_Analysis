@@ -24,6 +24,8 @@ class Correlator(object):
         Catalogue arrays with important fields: ra, dec, FOM.
     bins : array
         Bins to use for figure of merit.
+    seed : int | None
+        Seed for the randomization.
 
     Optional Parameters
     --------------------
@@ -32,8 +34,8 @@ class Correlator(object):
     dec_range : float
         Sequence of two values for the minimum and maximum declination defining
         the portion of the sky to be analysed.
-    seed : int
-        Seed for the randomization.
+    boots : int | None
+        Define scrambling scheme to apply to the catalogue
 
     Attributes
     --------------------
@@ -51,7 +53,8 @@ class Correlator(object):
     random :
         Numpy RandomState() initialized with seed.
     boots : int
-
+        Define scrambling scheme to apply to the catalogue. See self.boots for
+        details.
     scramble : int
         Set the type of scrambling to apply. See self.scramble definition for
         details.
@@ -76,7 +79,7 @@ class Correlator(object):
         self.primaries = {}
         self.secondaries = {}
 
-        print("Catalogue: {0:d} sources".format(len(catalogue)))
+        print(f"Catalogue: {len(catalogue)} sources")
         self._boots = boots
 
         self.bins = []
@@ -111,17 +114,17 @@ class Correlator(object):
                 self.bins.append(b_i)
                 self.mcat.append(mc)
 
-                print("\t{0:4d} sources above {1:.2f} ({2:7.2%})".format(
-                    mc.sum(), b_i, mc.sum(dtype=np.float) / len(mc)))
+                print(
+                    f"\t{np.sum(mc):4d} sources above {b_i:.2f} ({np.sum(mc)/len(mc):.2f}%)")
             else:
-                print("\tno new sources at {0:.2f}, skip".format(b_i))
+                print(f"\tno new sources at {b_i:.2f}, skip")
 
         self.bins = np.asarray(self.bins)
         self.mcat = np.asarray(self.mcat)
 
         mcat = np.any(self.mcat, axis=0)
-        print("Remove sources that are in no bin: {0:7.2%}".format(
-            (~mcat).sum(dtype=np.float) / len(mcat)))
+        print(
+            f"Remove sources that are in no bin: {np.sum(~mcat)/len(mcat):.2f}%")
         self.catalogue = catalogue[mcat]
         self.mcat = self.mcat.T[mcat].T
 
@@ -144,6 +147,9 @@ class Correlator(object):
         ----------
         scramble : bool
             Scrambles the position of sources/primaries.
+        max_shift : float | None
+            Scramble the sources within a maximum shift from the
+            original position in the catalogue. Must be given in radians.
 
         Returns
         ---------
@@ -186,11 +192,6 @@ class Correlator(object):
 
         for key, sam in self.primaries.items():
             u, sigma = sam.get_vector(scramble=scramble)
-            # print("---")
-            # print("Scramble {0}".format(scramble))
-            # for i in u:
-            #    print("{0} -  {1} -  {2}".format(i[0], i[1], i[2]))
-            # print("---")
 
             # calculate distance of events and catalogue
             # cosD : ndarray(shape: (# neutrinos, # sources))
@@ -253,7 +254,7 @@ class Correlator(object):
             raise ValueError("mlat not in [0, pi /2] range")
 
         print(
-            "- Setting galactic plane width to {0:.1f}deg".format(np.degrees(value)))
+            f"- Setting galactic plane width to {value:.1f}deg.")
 
         self._mlat = value
 
@@ -497,9 +498,11 @@ class Correlator(object):
         Parameters
         ----------
         scramble : bool
-            Scramble source position. Three different scramblings are implemented.
-            See self.boots for details.
-
+            Scramble source position. Three different scramblings are
+            implemented. See self.boots for details.
+        max_shift : float | None
+            Scramble the sources within a maximum shift from the
+            original position in the catalogue. Must be given in radians.
         Returns
         ----------
         v : array
@@ -692,7 +695,7 @@ class Correlator(object):
 
             else:
                 raise ValueError(
-                    "Don't know scrambling {0:s}".format(self.boots))
+                    f"Don't know scrambling {self.boots}")
 
         else:
             v = self.v
@@ -1047,7 +1050,7 @@ class EventSample(object):
         events : ndarray
             Contains coordinates of events ("ra", "dec").
             May contain the angular uncertainty "sigma",
-            if not it has to be provide as argument.
+            if not it has to be provided as argument.
         seed : int | None
             Seed (default: None)
         '''
@@ -1059,10 +1062,8 @@ class EventSample(object):
         self.N = len(self.events)
 
         if seed is None:
-            # print("{0:s} - Initialize with random seed".format(self.__repr__()))
             self.random = np.random.RandomState()
         else:
-            # print("{0:s} - Initialize with seed {1:d}".format(self.__repr__(), seed))
             self.random = np.random.RandomState(seed)
 
         return
