@@ -559,25 +559,43 @@ def load_5bzcat(dpath=dpath, name=None):
 
     print("\tFound {0:d} sources".format(len(orr)))
 
-# arr = np.genfromtxt(os.path.join(dpath, fname),
-#                     usecols=[1, 2, 3],
-#                     delimiter=",",
-#                     skip_header=1)
+    return orr
 
-# print("\tFound {0:d} sources".format(len(arr)))
 
-# orr = np.empty((len(arr),), dtype=[("ra", np.float), ("dec", np.float),
-#                                    ("FOM", np.float), ("id", "S17")])
+def load_rfc(dpath=dpath, name=None):
 
-# nrr = np.genfromtxt(os.path.join(dpath, fname),
-#                     usecols=[0], dtype="S18",
-#                     delimiter=",",
-#                     skip_header=1)
+    if name is None:
+        fname = "RFC_subset.txt"
+    else:
+        fname = str(name)
 
-# orr["id"] = nrr
-# orr["ra"] = np.radians(arr[:, 0])
-# orr["dec"] = np.radians(arr[:, 1])
-# orr["FOM"] = arr[:, 2]
+    print("Load {0:s}".format(fname))
+
+    df = pd.read_csv(
+        os.path.join(dpath, fname), delimiter=",", usecols=[0, 1, 2, 5, 7],
+        skiprows=1, header=None,
+        names=["id", "ra", "dec", "FOM", "BZCat_name"],
+        na_values='  ',
+    )
+
+    dtype = [
+        ("id", "S18"),
+        ("ra", float),
+        ("dec", float),
+        ("FOM", float),
+        ("BZCat_name", "S21"),
+    ]
+
+    arr = df.to_numpy()
+    orr = np.empty(len(df), dtype=dtype)
+
+    for i, name in enumerate(df.columns):
+        orr[name] = arr[:, i]
+
+    orr['ra'] = np.radians(orr['ra'])
+    orr['dec'] = np.radians(orr['dec'])
+
+    print("\tFound {0:d} sources".format(len(orr)))
 
     return orr
 
@@ -591,7 +609,8 @@ catnames = ["2WHSP",
             "ALPAKA",
             "OUTFLOWS",
             "3HSP",
-            "5BZCat"]
+            "5BZCat",
+            "RFC"]
 
 loaders = [load_2whsp,
            load_2fhl,
@@ -601,7 +620,8 @@ loaders = [load_2whsp,
            load_fl8y,
            load_alpaka,
            load_outflows,
-           load_3hsp]
+           load_3hsp,
+           load_rfc]
 
 catsuffs = [[""],  # 2whsp
             ["", "HBL", "non_HBL"],  # 2fhl
@@ -614,6 +634,7 @@ catsuffs = [[""],  # 2whsp
             [""],  # ouflows
             [""],  # 3hsp
             [""],  # 5bzcat
+            [""],  # rfc
             ]
 
 catbins = [[0., 0.316, 0.631, 1., 1.585, 1.995, 2.512, 3.162, 3.981],  # 2whsp
@@ -631,7 +652,8 @@ catbins = [[0., 0.316, 0.631, 1., 1.585, 1.995, 2.512, 3.162, 3.981],  # 2whsp
                                                              40., 40.5, 41., 41.5, 42., 42.5, 43.]],  # Alpaka Avg.Vel, Alpaka OIII
            [0],  # Outflows
            [0., 1./32., 1./16, 1./8., 1./4., 1./2., 1., 2., 4.],  # 3hsp
-           [0]]   # 5BZCat
+           [0],   # 5BZCat
+           [0]]   # RFC
 
 
 def init_biascorr_newNeutrinos(cat, bins, seed=None, scramble=0, mlat=np.radians(10.), boots=0, TA_full=False, sigma_factor=1., **kwargs):
